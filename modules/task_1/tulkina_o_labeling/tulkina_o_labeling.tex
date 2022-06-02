@@ -1,0 +1,893 @@
+\documentclass[12pt]{article}
+\usepackage{lingmacros}
+\usepackage{tree-dvips}
+
+\usepackage[T2A]{fontenc}
+\usepackage[utf8]{luainputenc}
+\usepackage[english, russian]{babel}
+\usepackage[pdftex]{hyperref}
+\usepackage[14pt]{extsizes}
+\usepackage{listings}
+\usepackage{amsmath}
+\usepackage{color}
+\usepackage{multicol}
+\usepackage{longtable}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{multirow}
+\usepackage{graphicx}
+\usepackage{indentfirst}
+\usepackage{caption}
+
+\geometry{a4paper,top=2cm,bottom=2cm,left=2.5cm,right=1.5cm}
+\setlength{\parskip}{0.5cm}
+
+\lstset{language=C++,
+		basicstyle=\footnotesize,
+		keywordstyle=\color{blue}\ttfamily,
+		stringstyle=\color{red}\ttfamily,
+		commentstyle=\color{green}\ttfamily,
+		morecomment=[l][\color{magenta}]{\#}, 
+		tabsize=4,
+		breaklines=true,
+  		breakatwhitespace=true,
+  		title=\lstname,       
+}
+\renewcommand{\thesubsection}{\arabic{subsection}}
+\makeatletter
+\def\@seccntformat#1{\@ifundefined{#1@cntformat}%
+   {\csname the#1\endcsname\quad}
+   {\csname #1@cntformat\endcsname}}
+\newcommand\section@cntformat{}
+\makeatother
+
+\begin{document}
+
+\begin{titlepage}
+
+\begin{center}
+МИНИСТЕРСТВО НАУКИ И ВЫСШЕГО ОБРАЗОВАНИЯ РОССИЙСКОЙ ФЕДЕРАЦИИ 
+\end{center}
+
+\begin{center}
+Федеральное государственное автономное образовательное учреждение высшего образования \\
+Национальный исследовательский Нижегородский государственный университет им. Н.И. Лобачевского
+\end{center}
+
+\begin{center}
+Институт информационных технологий, математики и механики
+\end{center}
+
+\vspace{4em}
+
+\begin{center}
+\textbf{\LargeОтчет по лабораторной работе} \\
+\end{center}
+
+\begin{center}
+\textbf{«Маркировка компонент на бинарном изображении»} \\
+\end{center}
+
+\vspace{4em}
+
+\newbox{\lbox}
+\savebox{\lbox}{\hbox{text}}
+\newlength{\maxl}
+\setlength{\maxl}{\wd\lbox}
+\hfill\parbox{7cm}{
+\hspace*{5cm}\hspace*{-5cm}\textbf{Выполнила:} \\ студентка группы 381906-3 \\ Тюлькина О. В. \\
+\\
+\hspace*{5cm}\hspace*{-5cm}\textbf{Проверил:}\\ доцент кафедры МОСТ, \\ кандидат технических наук \\ Сысоев А. В.\\
+}
+\vspace{\fill}
+
+\begin{center} Нижний Новгород \\ 2022 \end{center}
+\end{titlepage}
+
+\setcounter{page}{2}
+
+% Содержание
+\tableofcontents
+\newpage
+
+% Введение
+\section*{Введение}
+\addcontentsline{toc}{section}{Введение}
+ \par Поиск и маркировка связных компонентов в бинарных изображениях — один из базовых алгоритмов анализа и обработки изображений. Перед тем как компьютер может определить объект изображения, группы смежных пикселей должны быть идентифицированы и промаркированы. Операция маркировки и выделения связных компонент является неотъемлемой частью почти всех приложений распознавания образов и компьютерного зрения. 
+ 
+% Постановка задачи
+\section*{Постановка задачи}
+\addcontentsline{toc}{section}{Постановка задачи}
+В рамках лабораторной работы необходимо разработать программу, которая выполняет:  
+\begin{itemize}
+    \item Реализацию последовательного алгоритма маркировки компонент на бинарном изображении;
+
+	\item Реализацию алгоритма маркировки компонент на бинарном изображении с использованием технологии OpenMP;
+
+	\item Реализацию алгоритма маркировки компонент на бинарном изображении с использованием технологии TBB;
+	
+	\item Проводит расчет теоретического ускорения и эффективности;
+\end{itemize}
+\newpage
+% Описание алгоритма
+\section*{Описание алгоритма}
+\addcontentsline{toc}{section}{Описание алгоритма}
+Алгоритм выполняет два прохода над изображением. Первый проход назначает всем ненулевым пикселям временные метки и записывет для них значения эквивалентности. Связанный компонент (объект) - это набор смежных пикселей. Под выделением связных компонент понимают присвоение уникальной метки каждому объекту изображения. 
+\par Проверка связности выполняется путем проверки меток соседних пикселей (соседние элементы, метки которых еще не назначены, игнорируются). В данной лабораторной работе рассматривается 8-связное соединение: два соседних пикселя являются частью одного и того же объекта, если они оба включены и соединены по горизонтали, вертикали или диагонали. Как только начальная маркировка и запись эквивалентностей завершены, второй проход заменяет каждую временную метку наименьшей меткой ее класса эквивалентности.
+По условию задачи фоновые пиксели (белые области) бинарного изображения помечаются как 0.
+
+% Описание схемы распараллеливания
+\section*{Описание схемы распараллеливания}
+\addcontentsline{toc}{section}{Описание схемы распараллеливания}
+Основная идея реализации параллельного  алгоритма состоит в распределении строк матрицы (бинарного изображения) между потоками. Каждый поток будет обрабатывать определенное количество строк матрицы бинарного изображения. При выходе из параллельного региона кода во всех параллельных версиях используется автоматическая синхронизация.
+
+\subsection{Реализация OpenMP}
+\addcontentsline{toc}{subsection}{OpenMP}
+\par Для распараллеливания работы используется директива \verb|#pragma omp parallel|, которая содержит директиву \verb|#pragma omp for|, обеспечивающую распределение итераций циклов между потоками. Завершение директив является синхронным.
+
+\subsection{Реализация TBB}
+\addcontentsline{toc}{subsection}{TBB}
+\par Для распараллеливанию вычислений воспользуемся свойствами планировщика задач, который отвечает за управление группами задач. Одновременное выполнение задач обеспечивается через \verb|task_group|, которое хорошо подходит для распараллеливания вычислительно интенсивной работы.
+
+
+% Описание программной реализации
+\section*{Описание программной реализации}
+\addcontentsline{toc}{section}{Описание программной реализации}
+\par Программа состоит из заголовочного файла labeling.h и двух файлов исходного кода labeling.cpp и main.cpp.
+Алгоритм маркировки бинарного изображения вызывается с помощью функции:
+\begin{lstlisting}
+std::vector<std::vector<int>> labeling(
+    const std::vector<std::vector<int>>& binary_image) 
+\end{lstlisting}
+\par В качестве входного параметра выступает бинарное изображение, над которым будет произведена маркировка. Функция будет возвращать результатирующую матрицу - маркированное изображение.
+
+\par Реализация алгоритма маркировки  с технологией параллельного програмирования OpenMP содержится в функции:
+\begin{lstlisting}
+std::vector<std::vector<int>> labeling_omp(
+    const std::vector<std::vector<int>>& binary_image) 
+\end{lstlisting}
+\par Реализация алгоритма маркировки с технологией параллельного програмирования TBB содержится в функции:
+\begin{lstlisting}
+std::vector<std::vector<int>> labeling_tbb(
+    const std::vector<std::vector<int>>& binary_image) 
+\end{lstlisting}
+\newpage
+
+% Результаты экспериментов
+\section*{Результаты экспериментов}
+\addcontentsline{toc}{section}{Результаты экспериментов}
+Вычислительные эксперименты для оценки эффективности работы параллельного алгоритма проводились на ПК со следующими характеристиками:
+\begin{itemize}
+\item Процессор: AMD Ryzen 5 3500U, 2.10 ГГц, количество ядер: 4, количество логических процессоров: 8;
+\item Оперативная память: 8,00 ГБ, 2400 МГц; 
+\item Операционная система: Windows 10;
+\end{itemize}
+
+\par Количество используемых потоков для OpenMP определялось автоматически.
+\begin{table}[!h]
+\caption{Результаты вычислительных экспериментов. Сравнение последовательного алгоритма с OpenMP}
+\centering
+\begin{tabular}{|p{4cm}|p{4cm}|p{4cm}|p{3cm}|}
+\hline
+Размер матрицы & Последовательный алгоритм,сек & Параллельный алгоритм,сек & Ускорение  \\\hline
+250000  & 0.032582 & 0.013783 & 2.363932  \\\hline
+640000  & 0.103174 & 0.040938 & 2.520246  \\\hline
+1000000 & 0.123786 & 0.048175 & 2.569503  \\
+\hline
+\end{tabular}
+\end{table}
+
+\par Эксперименты для TBB версии проводились на 6 потоках
+\begin{table}[!h]
+\caption{Результаты вычислительных экспериментов. Сравнение последовательного алгоритма с TBB}
+\centering
+\begin{tabular}{|p{4cm}|p{4cm}|p{4cm}|p{3cm}|}
+\hline
+Размер матрицы & Последовательный алгоритм,сек & Параллельный алгоритм,сек & Ускорение  \\\hline
+250000  & 0.034798 & 0.015056 & 2.311302  \\\hline
+640000  & 0.077565 & 0.032793 & 2.365321  \\\hline
+1000000 & 0.179394 & 0.072720 & 2.466919  \\
+\hline
+\end{tabular}
+\end{table}
+
+\newpage
+
+% Выводы из результатов
+\section*{Выводы из результатов}
+\addcontentsline{toc}{section}{Выводы из результатов}
+\par  Из данных, полученных в результате экспериментов, можно сделать вывод, что параллельная версия работает быстрее и эффективнее, чем последовательная.
+При больших матрицах параллельная реализация показывает результат заметно лучше, чем последовательная. 
+\newpage
+
+% Заключение
+\section*{Заключение}
+\addcontentsline{toc}{section}{Заключение}
+Таким образом, в лабораторной работе были реализованы последовательный и параллельныe алгоритмы маркировки компонент на бинарных изображениях. Параллельная программа построена на технологиях OpenMP и TBB.
+Проведенные тесты показали корректность реализованной программы, а проведенные эксперименты доказали эффективность параллельных алгоритмов по сравнению с последовательным. Время работы программы во многом зависит от размера входных данных и количества действующих потоков. 
+\newpage
+
+% Литература
+\addcontentsline{toc}{section}{Литература}
+\begin{enumerate}
+\item Электронный ресурс: \\
+URL: \url{https://en.wikipedia.org/wiki/Connected-component_labeling}
+\item А.В. Сысоев, И.Б. Мееров, А.Н. Свистунов, А.Л. Курылев, А.В. Сенин, А.В. Шишков, К.В. Корняков, А.А. Сиднев «Параллельное программирование в системах с общей памятью. Инструментальная поддержка». Нижний Новгород, 2007.
+\item А.В. Сысоев, И.Б. Мееров, А.А. Сиднев «Средства разработки параллельных программ для систем с общей памятью. Библиотека Intel Threading Building Blocks». Нижний Новгород, 2007. 
+\end{enumerate}
+\newpage
+
+% Приложение
+\section*{Приложение}
+\addcontentsline{toc}{section}{Приложение}
+\textbf{Последовательная версия}
+\newline
+\newline labeling.h
+\begin{lstlisting}
+// Copyright 2022 Tulkina Olga
+#ifndef MODULES_TASK_1_TULKINA_O_LABELING_LABELING_H_
+#define MODULES_TASK_1_TULKINA_O_LABELING_LABELING_H_
+
+#include <omp.h>
+#include <cmath>
+#include <vector>
+
+class Union {
+  std::vector<int> label_image;
+
+ public:
+  explicit Union(int N) {
+    label_image.resize(N);
+    for (int i = 0; i < N; i++) {
+      label_image[i] = i;
+    }
+  }
+
+  int get_label(int index) {
+    int root = index;
+    while (root != label_image[root]) root = label_image[root];
+    while (label_image[index] != root) {
+      int new_index = label_image[index];
+      label_image[index] = root;
+      index = new_index;
+    }
+    return root;
+  }
+
+  void set_label(int my_index, int neighbor_index) {
+    int my_label = get_label(my_index);
+    int neighbor_label = get_label(neighbor_index);
+    if (my_label == neighbor_label) return;
+
+    (neighbor_label < my_label) ? label_image[my_label] = neighbor_label
+                                : label_image[neighbor_label] = my_label;
+  }
+};
+
+std::vector<std::vector<int>> labeling(
+    const std::vector<std::vector<int>>& binary_image);
+#endif  // MODULES_TASK_1_TULKINA_O_LABELING_LABELING_H_
+\end{lstlisting}
+labeling.cpp
+\begin{lstlisting}
+// Copyright 2022 Tulkina Olga
+#include "../../modules/task_1/tulkina_o_labeling/labeling.h"
+std::vector<std::vector<int>> labeling(
+    const std::vector<std::vector<int>>& binary_image) {
+  int width = binary_image[0].size(), height = binary_image.size();
+
+  Union un(height * width + 1);
+  std::vector<std::vector<int>> res(height, std::vector<int>(width));
+
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      if (binary_image[y][x] > 0) {
+        int index = y * width + x + 1;
+
+        if (x > 0 && binary_image[y][x - 1]) {
+          un.set_label(index, y * width + x - 1 + 1);
+        }
+        if (y > 0 && binary_image[y - 1][x]) {
+          un.set_label(index, (y - 1) * width + x + 1);
+        }
+        if ((y > 0 && x > 0) && binary_image[y - 1][x - 1]) {
+          un.set_label(index, (y - 1) * width + (x - 1) + 1);
+        }
+        if ((y > 0 && x < width - 1) && binary_image[y - 1][x + 1]) {
+          un.set_label(index, (y - 1) * width + (x + 1) + 1);
+        }
+      }
+    }
+  }
+
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      if (binary_image[y][x] > 0) res[y][x] = un.get_label(y * width + x + 1);
+    }
+  }
+  return res;
+}
+\end{lstlisting}
+main.cpp
+\begin{lstlisting}
+// Copyright 2022 Tulkina Olga
+#include <gtest/gtest.h>
+
+#include "../../modules/task_1/tulkina_o_labeling/labeling.h"
+
+TEST(Sequential, Test_1x1) {
+  std::vector<std::vector<int>> binary_image = {{0}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {{0}};
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+
+TEST(Sequential, Test_1x5) {
+  std::vector<std::vector<int>> binary_image = {{0, 1, 1, 0, 1}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {{0, 2, 2, 0, 5}};
+
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+
+TEST(Sequential, Test_5x1) {
+  std::vector<std::vector<int>> binary_image = {{0}, {1}, {1}, {1}, {1}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {{0}, {2}, {2}, {2}, {2}};
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+
+TEST(Sequential, Test_2x10) {
+  std::vector<std::vector<int>> binary_image = {{0, 1, 1, 0, 1, 0, 0, 0, 0, 0},
+                                                {1, 0, 1, 1, 1, 1, 1, 1, 0, 0}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {{0, 2, 2, 0, 2, 0, 0, 0, 0, 0},
+                                            {2, 0, 2, 2, 2, 2, 2, 2, 0, 0}};
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+
+TEST(Sequential, Test_10x10) {
+  std::vector<std::vector<int>> binary_image = {
+      {0, 1, 1, 0, 1, 0, 0, 0, 0, 0}, {0, 0, 1, 1, 0, 0, 0, 0, 1, 0},
+      {1, 0, 1, 1, 1, 1, 1, 1, 0, 0}, {1, 0, 0, 0, 0, 1, 1, 0, 1, 0},
+      {1, 0, 0, 0, 0, 0, 0, 1, 0, 1}, {1, 0, 0, 1, 0, 1, 0, 1, 0, 0},
+      {1, 0, 1, 0, 1, 1, 1, 0, 0, 1}, {1, 0, 0, 1, 1, 1, 0, 0, 1, 1},
+      {1, 0, 0, 0, 1, 0, 0, 0, 1, 1}, {1, 0, 0, 0, 0, 0, 1, 1, 1, 1}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {
+      {0, 2, 2, 0, 2, 0, 0, 0, 0, 0},    {0, 0, 2, 2, 0, 0, 0, 0, 2, 0},
+      {21, 0, 2, 2, 2, 2, 2, 2, 0, 0},   {21, 0, 0, 0, 0, 2, 2, 0, 2, 0},
+      {21, 0, 0, 0, 0, 0, 0, 2, 0, 2},   {21, 0, 0, 2, 0, 2, 0, 2, 0, 0},
+      {21, 0, 2, 0, 2, 2, 2, 0, 0, 70},  {21, 0, 0, 2, 2, 2, 0, 0, 70, 70},
+      {21, 0, 0, 0, 2, 0, 0, 0, 70, 70}, {21, 0, 0, 0, 0, 0, 70, 70, 70, 70}};
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+\end{lstlisting}
+
+\textbf{OpenMP версия}
+\newline
+\newline labeling.h
+\begin{lstlisting}
+// Copyright 2022 Tulkina Olga
+
+#ifndef MODULES_TASK_2_TULKINA_O_LABELING_LABELING_H_
+#define MODULES_TASK_2_TULKINA_O_LABELING_LABELING_H_
+
+#include <omp.h>
+
+#include <cmath>
+#include <random>
+#include <vector>
+
+class Union {
+  std::vector<int> label_image;
+
+ public:
+  explicit Union(int N) {
+    label_image.resize(N);
+    for (int i = 0; i < N; i++) {
+      label_image[i] = i;
+    }
+  }
+
+  int get_label(int index) {
+    int root = index;
+    while (root != label_image[root]) root = label_image[root];
+    while (label_image[index] != root) {
+      int new_index = label_image[index];
+      label_image[index] = root;
+      index = new_index;
+    }
+    return root;
+  }
+
+  void set_label(int my_index, int neighbor_index) {
+    int my_label = get_label(my_index);
+    int neighbor_label = get_label(neighbor_index);
+    if (my_label == neighbor_label) return;
+
+    (neighbor_label < my_label) ? label_image[my_label] = neighbor_label
+                                : label_image[neighbor_label] = my_label;
+  }
+};
+
+std::vector<std::vector<int>> labeling(
+    const std::vector<std::vector<int>>& binary_image);
+std::vector<std::vector<int>> labeling_omp(
+    const std::vector<std::vector<int>>& binary_image);
+#endif  // MODULES_TASK_2_TULKINA_O_LABELING_LABELING_H_
+\end{lstlisting}
+labeling.cpp
+\begin{lstlisting}
+// Copyright 2022 Tulkina Olga
+#include "../../modules/task_2/tulkina_o_labeling/labeling.h"
+const int THREADS = 12;
+std::vector<std::vector<int>> labeling(
+    const std::vector<std::vector<int>>& binary_image) {
+  int width = binary_image[0].size(), height = binary_image.size();
+
+  Union un(height * width + 1);
+  std::vector<std::vector<int>> res(height, std::vector<int>(width));
+
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      if (binary_image[y][x] > 0) {
+        int index = y * width + x + 1;
+
+        if (x > 0 && binary_image[y][x - 1]) {
+          un.set_label(index, y * width + x - 1 + 1);
+        }
+        if (y > 0 && binary_image[y - 1][x]) {
+          un.set_label(index, (y - 1) * width + x + 1);
+        }
+        if ((y > 0 && x > 0) && binary_image[y - 1][x - 1]) {
+          un.set_label(index, (y - 1) * width + (x - 1) + 1);
+        }
+        if ((y > 0 && x < width - 1) && binary_image[y - 1][x + 1]) {
+          un.set_label(index, (y - 1) * width + (x + 1) + 1);
+        }
+      }
+    }
+  }
+
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      if (binary_image[y][x] > 0) res[y][x] = un.get_label(y * width + x + 1);
+    }
+  }
+  return res;
+}
+
+std::vector<std::vector<int>> labeling_omp(
+    const std::vector<std::vector<int>>& binary_image) {
+  int width = binary_image[0].size(), height = binary_image.size();
+  Union un(height * width + 1);
+  std::vector<std::vector<int>> res;
+#pragma omp parallel num_threads(2)
+  {
+#pragma omp single nowait
+    res.resize(height, std::vector<int>(width));
+  }
+
+#pragma omp parallel shared(width, un) firstprivate(height) num_threads(THREADS)
+  {
+#pragma omp for nowait
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        if (binary_image[y][x] > 0) {
+          int index = y * width + x + 1;
+
+          if (x > 0 && binary_image[y][x - 1]) {
+            un.set_label(index, y * width + x - 1 + 1);
+          }
+          if (y > 0 && binary_image[y - 1][x]) {
+            un.set_label(index, (y - 1) * width + x + 1);
+          }
+          if ((y > 0 && x > 0) && binary_image[y - 1][x - 1]) {
+            un.set_label(index, (y - 1) * width + (x - 1) + 1);
+          }
+          if ((y > 0 && x < width - 1) && binary_image[y - 1][x + 1]) {
+            un.set_label(index, (y - 1) * width + (x + 1) + 1);
+          }
+        }
+      }
+    }
+  }
+#pragma omp parallel for shared(un, width, res) firstprivate(height) \
+    num_threads(THREADS)
+  for (int y = 0; y < height; y++)
+    for (int x = 0; x < width; x++)
+      if (binary_image[y][x] > 0) res[y][x] = un.get_label(y * width + x + 1);
+
+  return res;
+}
+\end{lstlisting}
+main.cpp
+\begin{lstlisting}
+// Copyright 2022 Tulkina Olga
+#include <gtest/gtest.h>
+
+#include "../../modules/task_2/tulkina_o_labeling/labeling.h"
+
+TEST(OMP, Test_1x1) {
+  std::vector<std::vector<int>> binary_image = {{0}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {{0}};
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+
+TEST(OMP, Test_1x5) {
+  std::vector<std::vector<int>> binary_image = {{0, 1, 1, 0, 1}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {{0, 2, 2, 0, 5}};
+
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+
+TEST(OMP, Test_5x1) {
+  std::vector<std::vector<int>> binary_image = {{0}, {1}, {1}, {1}, {1}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {{0}, {2}, {2}, {2}, {2}};
+
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+
+TEST(OMP, Test_10x10) {
+  std::vector<std::vector<int>> binary_image = {
+      {0, 1, 1, 0, 1, 0, 0, 0, 0, 0}, {0, 0, 1, 1, 0, 0, 0, 0, 1, 0},
+      {1, 0, 1, 1, 1, 1, 1, 1, 0, 0}, {1, 0, 0, 0, 0, 1, 1, 0, 1, 0},
+      {1, 0, 0, 0, 0, 0, 0, 1, 0, 1}, {1, 0, 0, 1, 0, 1, 0, 1, 0, 0},
+      {1, 0, 1, 0, 1, 1, 1, 0, 0, 1}, {1, 0, 0, 1, 1, 1, 0, 0, 1, 1},
+      {1, 0, 0, 0, 1, 0, 0, 0, 1, 1}, {1, 0, 0, 0, 0, 0, 1, 1, 1, 1}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {
+      {0, 2, 2, 0, 2, 0, 0, 0, 0, 0},    {0, 0, 2, 2, 0, 0, 0, 0, 2, 0},
+      {21, 0, 2, 2, 2, 2, 2, 2, 0, 0},   {21, 0, 0, 0, 0, 2, 2, 0, 2, 0},
+      {21, 0, 0, 0, 0, 0, 0, 2, 0, 2},   {21, 0, 0, 2, 0, 2, 0, 2, 0, 0},
+      {21, 0, 2, 0, 2, 2, 2, 0, 0, 70},  {21, 0, 0, 2, 2, 2, 0, 0, 70, 70},
+      {21, 0, 0, 0, 2, 0, 0, 0, 70, 70}, {21, 0, 0, 0, 0, 0, 70, 70, 70, 70}};
+
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+
+TEST(OMP, Test_3000x3000) {
+  int width = 3000;
+  int height = 3000;
+  std::random_device dev;
+  std::mt19937 gen(dev());
+  std::uniform_real_distribution<> urd(0, 2);
+  std::vector<std::vector<int>> binary_image(height, std::vector<int>(width));
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < height; x++) {
+      binary_image[y][x] = urd(gen);
+    }
+  }
+
+  std::vector<std::vector<int>> binary_image_seq(height,
+                                                 std::vector<int>(width));
+  double t1 = omp_get_wtime();
+  binary_image_seq = labeling(binary_image);
+  double t2 = omp_get_wtime();
+
+  std::vector<std::vector<int>> binary_image_omp(height,
+                                                 std::vector<int>(width));
+  double t3 = omp_get_wtime();
+  binary_image_omp = labeling_omp(binary_image);
+  double t4 = omp_get_wtime();
+
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++)
+    EXPECT_EQ(binary_image_omp[i], binary_image_seq[i]);
+  printf("seq labeling: %lf\n", t2 - t1);
+  printf("parallel labeling: %lf\n", t4 - t3);
+  printf("labeling: %lf\n", (t2 - t1) / (t4 - t3));
+}
+\end{lstlisting}
+
+\textbf{TBB версия}
+\newline
+\newline labeling.h
+\begin{lstlisting}
+// Copyright 2022 Tulkina Olga
+
+#ifndef MODULES_TASK_3_TULKINA_O_LABELING_LABELING_H_
+#define MODULES_TASK_3_TULKINA_O_LABELING_LABELING_H_
+
+#include <omp.h>
+#include <tbb/tbb.h>
+
+#include <cmath>
+#include <random>
+#include <vector>
+
+class Union {
+  std::vector<int> label_image;
+
+ public:
+  explicit Union(int N) {
+    label_image.resize(N);
+    for (int i = 0; i < N; i++) {
+      label_image[i] = i;
+    }
+  }
+
+  int get_label(int index) {
+    int root = index;
+    while (root != label_image[root]) root = label_image[root];
+    while (label_image[index] != root) {
+      int new_index = label_image[index];
+      label_image[index] = root;
+      index = new_index;
+    }
+    return root;
+  }
+
+  void set_label(int my_index, int neighbor_index) {
+    int my_label = get_label(my_index);
+    int neighbor_label = get_label(neighbor_index);
+    if (my_label == neighbor_label) return;
+
+    (neighbor_label < my_label) ? label_image[my_label] = neighbor_label
+                                : label_image[neighbor_label] = my_label;
+  }
+};
+
+std::vector<std::vector<int>> labeling(
+    const std::vector<std::vector<int>>& binary_image);
+std::vector<std::vector<int>> labeling_tbb(
+    const std::vector<std::vector<int>>& binary_image);
+#endif  // MODULES_TASK_3_TULKINA_O_LABELING_LABELING_H_
+\end{lstlisting}
+labeling.cpp
+\begin{lstlisting}
+// Copyright 2022 Tulkina Olga
+#include "../../modules/task_3/tulkina_o_labeling/labeling.h"
+
+const int THREADS = 12;
+std::vector<std::vector<int>> labeling(
+    const std::vector<std::vector<int>>& binary_image) {
+  int width = binary_image[0].size(), height = binary_image.size();
+
+  Union un(height * width + 1);
+
+  std::vector<std::vector<int>> res(height, std::vector<int>(width));
+
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      if (binary_image[y][x] > 0) {
+        int index = y * width + x + 1;
+
+        if (x > 0 && binary_image[y][x - 1]) {
+          un.set_label(index, y * width + x - 1 + 1);
+        }
+        if (y > 0 && binary_image[y - 1][x]) {
+          un.set_label(index, (y - 1) * width + x + 1);
+        }
+        if ((y > 0 && x > 0) && binary_image[y - 1][x - 1]) {
+          un.set_label(index, (y - 1) * width + (x - 1) + 1);
+        }
+        if ((y > 0 && x < width - 1) && binary_image[y - 1][x + 1]) {
+          un.set_label(index, (y - 1) * width + (x + 1) + 1);
+        }
+      }
+    }
+  }
+
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      if (binary_image[y][x] > 0) res[y][x] = un.get_label(y * width + x + 1);
+    }
+  }
+  return res;
+}
+
+std::vector<std::vector<int>> labeling_tbb(
+    const std::vector<std::vector<int>>& binary_image) {
+  int width = binary_image[0].size(), height = binary_image.size();
+
+  Union un(height * width + 1);
+  std::vector<std::vector<int>> res(height, std::vector<int>(width));
+  tbb::task_scheduler_init init(THREADS);
+  tbb::task_group gruppe;
+  int step = height / THREADS;
+
+  for (int i = 0; i < THREADS; i++) {
+    gruppe.run([&binary_image, i, width, &un, step, height]() {
+      int start, finish;
+      if (i < THREADS - 1) {
+        start = step * i;
+        finish = step * (i + 1);
+      } else {
+        start = step * (THREADS - 1);
+        finish = height;
+      }
+      for (int y = start; y < finish; y++) {
+        for (int x = 0; x < width; x++) {
+          if (binary_image[y][x] > 0) {
+            int index = y * width + x + 1;
+
+            if (x > 0 && binary_image[y][x - 1]) {
+              un.set_label(index, y * width + x - 1 + 1);
+            }
+            if (y > 0 && binary_image[y - 1][x]) {
+              un.set_label(index, (y - 1) * width + x + 1);
+            }
+            if ((y > 0 && x > 0) && binary_image[y - 1][x - 1]) {
+              un.set_label(index, (y - 1) * width + (x - 1) + 1);
+            }
+            if ((y > 0 && x < width - 1) && binary_image[y - 1][x + 1]) {
+              un.set_label(index, (y - 1) * width + (x + 1) + 1);
+            }
+          }
+        }
+      }
+    });
+  }
+  gruppe.wait();
+
+  for (int i = 0; i < THREADS; i++) {
+    gruppe.run([&binary_image, i, width, &un, step, height, &res]() {
+      int start, finish;
+      if (i < THREADS - 1) {
+        start = step * i;
+        finish = step * (i + 1);
+      } else {
+        start = step * (THREADS - 1);
+        finish = height;
+      }
+      for (int y = start; y < finish; y++) {
+        for (int x = 0; x < width; x++) {
+          if (binary_image[y][x] > 0)
+            res[y][x] = un.get_label(y * width + x + 1);
+        }
+      }
+    });
+  }
+  gruppe.wait();
+
+  return res;
+}
+\end{lstlisting}
+main.cpp
+\begin{lstlisting}
+// Copyright 2022 Tulkina Olga
+#include <gtest/gtest.h>
+#include "../../modules/task_3/tulkina_o_labeling/labeling.h"
+
+TEST(TBB, Test_1x1) {
+  std::vector<std::vector<int>> binary_image = {{0}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {{0}};
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+
+TEST(TBB, Test_1x5) {
+  std::vector<std::vector<int>> binary_image = {{0, 1, 1, 0, 1}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {{0, 2, 2, 0, 5}};
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+
+TEST(TBB, Test_5x1) {
+  std::vector<std::vector<int>> binary_image = {{0}, {1}, {1}, {1}, {1}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {{0}, {2}, {2}, {2}, {2}};
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+
+TEST(TBB, Test_10x10) {
+  std::vector<std::vector<int>> binary_image = {
+      {0, 1, 1, 0, 1, 0, 0, 0, 0, 0}, {0, 0, 1, 1, 0, 0, 0, 0, 1, 0},
+      {1, 0, 1, 1, 1, 1, 1, 1, 0, 0}, {1, 0, 0, 0, 0, 1, 1, 0, 1, 0},
+      {1, 0, 0, 0, 0, 0, 0, 1, 0, 1}, {1, 0, 0, 1, 0, 1, 0, 1, 0, 0},
+      {1, 0, 1, 0, 1, 1, 1, 0, 0, 1}, {1, 0, 0, 1, 1, 1, 0, 0, 1, 1},
+      {1, 0, 0, 0, 1, 0, 0, 0, 1, 1}, {1, 0, 0, 0, 0, 0, 1, 1, 1, 1}};
+
+  binary_image = labeling(binary_image);
+
+  std::vector<std::vector<int>> expected = {
+      {0, 2, 2, 0, 2, 0, 0, 0, 0, 0},    {0, 0, 2, 2, 0, 0, 0, 0, 2, 0},
+      {21, 0, 2, 2, 2, 2, 2, 2, 0, 0},   {21, 0, 0, 0, 0, 2, 2, 0, 2, 0},
+      {21, 0, 0, 0, 0, 0, 0, 2, 0, 2},   {21, 0, 0, 2, 0, 2, 0, 2, 0, 0},
+      {21, 0, 2, 0, 2, 2, 2, 0, 0, 70},  {21, 0, 0, 2, 2, 2, 0, 0, 70, 70},
+      {21, 0, 0, 0, 2, 0, 0, 0, 70, 70}, {21, 0, 0, 0, 0, 0, 70, 70, 70, 70}};
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(expected[i], binary_image[i]);
+}
+
+TEST(TBB, Test_10x10_version2) {
+  int width = 10;
+  int height = 10;
+  std::vector<std::vector<int>> binary_image = {
+      {0, 1, 1, 0, 1, 0, 0, 0, 0, 0}, {0, 0, 1, 1, 0, 0, 0, 0, 1, 0},
+      {1, 0, 1, 1, 1, 1, 1, 1, 0, 0}, {1, 0, 0, 0, 0, 1, 1, 0, 1, 0},
+      {1, 0, 0, 0, 0, 0, 0, 1, 0, 1}, {1, 0, 0, 1, 0, 1, 0, 1, 0, 0},
+      {1, 0, 1, 0, 1, 1, 1, 0, 0, 1}, {1, 0, 0, 1, 1, 1, 0, 0, 1, 1},
+      {1, 0, 0, 0, 1, 0, 0, 0, 1, 1}, {1, 0, 0, 0, 0, 0, 1, 1, 1, 1}};
+
+  std::vector<std::vector<int>> binary_image_tbb(height,
+                                                 std::vector<int>(width));
+  binary_image_tbb = labeling_tbb(binary_image);
+
+  std::vector<std::vector<int>> expected = {
+      {0, 2, 2, 0, 2, 0, 0, 0, 0, 0},    {0, 0, 2, 2, 0, 0, 0, 0, 2, 0},
+      {21, 0, 2, 2, 2, 2, 2, 2, 0, 0},   {21, 0, 0, 0, 0, 2, 2, 0, 2, 0},
+      {21, 0, 0, 0, 0, 0, 0, 2, 0, 2},   {21, 0, 0, 2, 0, 2, 0, 2, 0, 0},
+      {21, 0, 2, 0, 2, 2, 2, 0, 0, 70},  {21, 0, 0, 2, 2, 2, 0, 0, 70, 70},
+      {21, 0, 0, 0, 2, 0, 0, 0, 70, 70}, {21, 0, 0, 0, 0, 0, 70, 70, 70, 70}};
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++) EXPECT_EQ(binary_image_tbb[i], expected[i]);
+}
+
+TEST(TBB, Test_3000x3000) {
+  int width = 3000;
+  int height = 3000;
+
+  std::random_device dev;
+  std::mt19937 gen(dev());
+  std::uniform_real_distribution<> urd(0, 2);
+  std::vector<std::vector<int>> binary_image(height, std::vector<int>(width));
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < height; x++) {
+      binary_image[y][x] = urd(gen);
+    }
+  }
+
+  std::vector<std::vector<int>> binary_image_seq(height,
+                                                 std::vector<int>(width));
+  double t1 = omp_get_wtime();
+  binary_image_seq = labeling(binary_image);
+  double t2 = omp_get_wtime();
+
+  std::vector<std::vector<int>> binary_image_tbb(height,
+                                                 std::vector<int>(width));
+  double t3 = omp_get_wtime();
+  binary_image_tbb = labeling_tbb(binary_image);
+
+  double t4 = omp_get_wtime();
+  int a = binary_image.size();
+  for (int i = 0; i < a; i++)
+    EXPECT_EQ(binary_image_tbb[i], binary_image_seq[i]);
+  printf("seq labeling: %lf\n", t2 - t1);
+  printf("parallel labeling: %lf\n", t4 - t3);
+  printf("labeling: %lf\n", (t2 - t1) / (t4 - t3));
+}
+\end{lstlisting}
+
+\end{document}
